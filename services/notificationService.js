@@ -41,15 +41,15 @@ const transporter = nodemailer.createTransport({
  */
 const sendNotification = async ({ token, email, title, body, data = {} }) => {
   try {
-    // Prioritize email notification if email is provided
+    let emailResult = null;
+    let pushResult = null;
+
     if (email) {
-      // Send email notification
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: email,
         subject: title,
         text: body,
-        // HTML version for better formatting
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #1a56db;">${title}</h2>
@@ -60,31 +60,29 @@ const sendNotification = async ({ token, email, title, body, data = {} }) => {
               Bu, universitet dərs cədvəli bildiriş sistemi tərəfindən avtomatik göndərilən məlumatdır.
             </p>
           </div>
-        `
+        `,
       };
-      
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`Email notification sent to ${email}: ${info.messageId}`);
-      return info;
-    } 
-    // Fall back to push notification if email is not available but token is
-    else if (token) {
+      emailResult = await transporter.sendMail(mailOptions);
+      console.log(`Email notification sent to ${email}: ${emailResult.messageId}`);
+    }
+
+    if (token) {
       const message = {
         notification: { title, body },
         data,
         token,
       };
-      const response = await admin.messaging().send(message);
-      console.log(`Push notification sent to device: ${response}`);
-      return response;
-    } else {
-      console.log('Neither email nor token provided. Notification skipped.');
+      pushResult = await admin.messaging().send(message);
+      console.log(`Push notification sent to device: ${pushResult}`);
     }
+
+    return { emailResult, pushResult };
   } catch (error) {
     console.error('Error sending notification:', error);
     throw error;
   }
 };
+
 
 /**
  * Send notifications to multiple recipients
@@ -100,7 +98,6 @@ const sendMulticastNotification = async (recipients, title, body, data = {}) => 
   }
 
   try {
-    // Filter valid recipients (those with email or token)
     const validRecipients = recipients.filter(
       (recipient) => recipient && (recipient.email || recipient.token)
     );
@@ -111,21 +108,21 @@ const sendMulticastNotification = async (recipients, title, body, data = {}) => 
     }
 
     console.log(`Sending "${title}" notification to ${validRecipients.length} recipients`);
-    
-    // Send notifications in parallel
-    const results = await Promise.all(
-      validRecipients.map(async ({ token, email }) => {
-        try {
-          return await sendNotification({ token, email, title, body, data });
-        } catch (err) {
-          console.error(`Failed to send notification to ${email || token}:`, err);
-          return null;
-        }
-      })
+
+    const results = await Promise.allSettled(
+      validRecipients.map(({ token, email }) =>
+        sendNotification({ token, email, title, body, data })
+      )
     );
 
-    const successCount = results.filter(result => result !== null).length;
-    console.log(`${successCount}/${validRecipients.length} notifications sent successfully`);
+    const successCount = results.filter(result => result.status === 'fulfilled').length;
+    const failureCount = results.length - successCount;
+
+    console.log(`${successCount}/${results.length} notifications sent successfully`);
+    if (failureCount > 0) {
+      console.log(`${failureCount} notifications failed`);
+    }
+
     return results;
   } catch (error) {
     console.error('Error in multicast notification:', error);

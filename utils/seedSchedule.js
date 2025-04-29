@@ -35,16 +35,6 @@ const scheduleData = {
     ],
     'Cümə': [
       { time: '', subject: 'Dərs yoxdur', teacher: '', room: '' },
-    ],
-    'Şənbə': [
-      { time: '09:00-10:20', subject: 'Elek. es. ve IoT tehl (M)', teacher: 'Agababayev R.R.', room: '426-1(otaq-korpus)' },
-      { time: '10:30-11:50', subject: 'MNST (M)', teacher: 'Meherremova A.', room: '517-1(otaq-korpus)' },
-      { time: '12:00-13:20', subject: 'NSE (L)', teacher: 'Sadiqzade C.', room: '115-5(otaq-korpus)' },
-    ],
-    'Bazar': [
-      { time: '09:00-10:20', subject: 'Elek. es. ve IoT tehl (M)', teacher: 'Agababayev R.R.', room: '426-1(otaq-korpus)' },
-      { time: '10:30-11:50', subject: 'MNST (M)', teacher: 'Meherremova A.', room: '517-1(otaq-korpus)' },
-      { time: '12:00-13:20', subject: 'NSE (L)', teacher: 'Sadiqzade C.', room: '115-5(otaq-korpus)' },
     ]
   },
   ust: {
@@ -59,7 +49,7 @@ const scheduleData = {
       { time: '12:00-13:20', subject: 'Elek. es. ve IoT tehl (m)', teacher: 'Meherremova A.', room: '409-3(otaq-korpus)' },
     ],
     'Çərşənbə': [
-      { time: '09:00-10:20', subject: 'Sah es. ve biz.gir. (M)', teacher: 'Ebdurehmanova S.E.', room: '404-1(otaq-korpus)' },
+      { time: '02:00-10:20', subject: 'Sah es. ve biz.gir. (M)', teacher: 'Ebdurehmanova S.E.', room: '404-1(otaq-korpus)' },
       { time: '10:30-11:50', subject: 'Sah es. ve biz.gir. (m)', teacher: 'Ebdurehmanova S.E.', room: '405-1(otaq-korpus)' },
       { time: '12:00-13:20', subject: 'NSE (m)', teacher: 'Sadiqzade C.', room: '303-3(otaq-korpus)' },
     ],

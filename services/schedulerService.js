@@ -4,147 +4,168 @@ const Schedule = require('../models/Schedule');
 const { sendMulticastNotification } = require('./notificationService');
 const { determineWeekType, getDayName, getTomorrowInfo } = require('../utils/scheduleUtils');
 
+// İstifadəçiləri tapırıq və bildiriş göndərilə bilənləri seçirik
+const getRecipients = async () => {
+  const users = await User.find();
+  return users
+    .filter(user => user.deviceToken || user.email) // Yalnız token və ya email olanları seçirik
+    .map(user => ({
+      token: user.deviceToken || null,
+      email: user.email || null,
+    }));
+};
+
+// Sabahkı dərs cədvəli haqqında bildiriş
+const sendTomorrowScheduleNotification = async () => {
+  console.log('Running evening notification job...');
+
+  const { date, dayName, weekType } = getTomorrowInfo();
+
+  // Əgər həftə sonudursa, bildiriş göndərmirik
+  if (date.getDay() === 0 || date.getDay() === 6) {
+    console.log('Tomorrow is weekend, skipping notifications');
+    return;
+  }
+
+  // Sabahkı dərsləri tap
+  const schedule = await Schedule.findOne({ weekType, day: dayName });
+
+  if (!schedule || !schedule.lessons || schedule.lessons.length === 0) {
+    console.log(`No lessons found for tomorrow (${dayName}, ${weekType})`);
+    return;
+  }
+
+  // Dərs məlumatlarını formatlaşdırırıq
+  const lessonCount = schedule.lessons.length;
+  let firstLessonTime = 'N/A';
+  let lessonDetails = '';
+
+  if (lessonCount > 0 && schedule.lessons[0].time) {
+    firstLessonTime = schedule.lessons[0].time.split('-')[0];
+
+    schedule.lessons.forEach((lesson, index) => {
+      if (lesson.subject !== 'Dərs yoxdur') {
+        lessonDetails += `${index + 1}. ${lesson.time} - ${lesson.subject} (${lesson.room})\n`;
+      }
+    });
+  }
+
+  // İstifadəçiləri tapırıq
+  const recipients = await getRecipients();
+
+  if (recipients.length === 0) {
+    console.log('No valid users found for sending notifications');
+    return;
+  }
+
+  // Bildiriş göndəririk
+  await sendMulticastNotification(
+    recipients,
+    `Sabahkı Dərs Cədvəli - ${dayName}`,
+    `${dayName} (${weekType} həftə) ${lessonCount} dərsiniz var. İlk dərs: ${firstLessonTime}\n\n${lessonDetails}`
+  );
+
+  console.log(`Evening notification sent to ${recipients.length} users`);
+};
+
+// Dərsdən 15 dəqiqə əvvəl bildiriş göndərmək - DÜZƏLDILMIŞ FUNKSIYA
+const sendLessonReminderNotifications = async () => {
+  console.log('Checking for upcoming lessons...');
+
+  const now = new Date();
+  const weekType = determineWeekType(now);
+  const dayName = getDayName(now.getDay());
+
+  // Həftə sonunda yoxlama etmirik
+  if (now.getDay() === 0 || now.getDay() === 6) {
+    console.log('Today is weekend, skipping notifications');
+    return;
+  }
+
+  // Cari günün dərs cədvəlini tapırıq
+  const schedule = await Schedule.findOne({ weekType, day: dayName });
+
+  if (!schedule || !schedule.lessons || schedule.lessons.length === 0) {
+    console.log(`No lessons found for today (${dayName}, ${weekType})`);
+    return;
+  }
+
+  // DÜZƏLDILMIŞ HİSSƏ: İndiki vaxtdan 15 dəqiqə sonra başlayan dərsləri tapırıq
+  const upcomingLessons = schedule.lessons.filter(lesson => {
+    // Dərs yoxdursa və ya vaxt boşdursa, keçirik
+    if (lesson.subject === 'Dərs yoxdur' || !lesson.time || lesson.time === '') {
+      return false;
+    }
+
+    // Vaxt formatını yoxlayırıq
+    if (!lesson.time.includes('-')) {
+      console.log(`Invalid time format for lesson: ${lesson.subject}`);
+      return false;
+    }
+
+    const [startTime] = lesson.time.split('-');
+    const [hours, minutes] = startTime.trim().split(':').map(Number);
+    
+    if (isNaN(hours) || isNaN(minutes)) {
+      console.log(`Could not parse time for lesson: ${lesson.subject}, time: ${lesson.time}`);
+      return false;
+    }
+
+    // Dərs başlama vaxtını hazırkı tarix üçün düzəldirik
+    const lessonTime = new Date(now);
+    lessonTime.setHours(hours, minutes, 0, 0);
+
+    // İndiki vaxtla dərs vaxtı arasındakı fərqi dəqiqə ilə hesablayırıq
+    const diffInMilliseconds = lessonTime.getTime() - now.getTime();
+    const diffInMinutes = diffInMilliseconds / (60 * 1000);
+    
+    // Dərs 15-20 dəqiqə ərzində başlayacaqsa, bildiriş göndəririk
+    // Bu 5 dəqiqəlik pəncərə cron job-ın işləmə intervalı üçün lazımdır
+    return diffInMinutes >= 14 && diffInMinutes <= 20;
+  });
+
+  if (upcomingLessons.length === 0) {
+    console.log('No upcoming lessons found for notification');
+    return;
+  }
+
+  // Bildiriş göndəriləcək istifadəçiləri tapırıq
+  const recipients = await getRecipients();
+
+  if (recipients.length === 0) {
+    console.log('No valid users found for sending notifications');
+    return;
+  }
+
+  // Hər dərs üçün bildiriş göndəririk
+  for (const lesson of upcomingLessons) {
+    await sendMulticastNotification(
+      recipients,
+      `Dərs Başlayır: ${lesson.subject}`,
+      `${lesson.time} - ${lesson.subject} dərsi 15 dəqiqə sonra başlayır.\nMüəllim: ${lesson.teacher}\nOtaq: ${lesson.room}`
+    );
+
+    console.log(`Lesson reminder sent for ${lesson.subject} to ${recipients.length} users`);
+  }
+};
+
+// Serverə deploy etdikdən sonra serverın vaxtını və saat qurşağını yoxlamaq üçün bu kodu əlavə edin
+console.log('Server current time:', new Date().toString());
+console.log('Server timezone offset:', new Date().getTimezoneOffset() / -60);
+
 // Bütün bildiriş planlaşdırıcılarını başlatmaq
 const initSchedulers = () => {
   // Hər gün axşam 20:00-da sabahkı dərs cədvəli haqqında bildiriş
-  cron.schedule('00 10 * * *', async () => {
-    try {
-      console.log('Running evening notification job...');
-      
-      const { date, dayName, weekType } = getTomorrowInfo();
-      
-      // Əgər həftə sonudursa, bildiriş göndərmirik
-      if (date.getDay() === 1) {
-        console.log('Tomorrow is weekend, skipping notifications');
-        return;
-      }
-      
-      // Sabahkı dərsləri tap
-      const schedule = await Schedule.findOne({ weekType, day: dayName });
-      
-      if (!schedule || !schedule.lessons || schedule.lessons.length === 0) {
-        console.log(`No lessons found for tomorrow (${dayName}, ${weekType})`);
-        return;
-      }
-      
-      // Bütün istifadəçiləri tapırıq
-      const users = await User.find();
-      const recipients = users
-        .filter(user => user.deviceToken || user.email) // Yalnız token və ya email olanları seçirik
-        .map(user => ({
-          token: user.deviceToken || null,
-          email: user.email || null,
-        }));
-      
-      if (recipients.length === 0) {
-        console.log('No valid users found for sending notifications');
-        return;
-      }
-      
-      // Dərs sayını və birinci dərsin başlama vaxtını əldə edirik
-      const lessonCount = schedule.lessons.length;
-      let firstLessonTime = 'N/A';
-      let lessonDetails = '';
-      
-      if (lessonCount > 0 && schedule.lessons[0].time) {
-        firstLessonTime = schedule.lessons[0].time.split('-')[0];
-        
-        // İlk 2 dərsin məlumatlarını əlavə et
-        schedule.lessons.slice(0, 2).forEach((lesson, index) => {
-          lessonDetails += `${index + 1}. ${lesson.time} - ${lesson.subject} (${lesson.room})\n`;
-        });
-        
-        if (lessonCount > 2) {
-          lessonDetails += `... və daha ${lessonCount - 2} dərs`;
-        }
-      }
-      
-      // Bildiriş göndəririk
-      await sendMulticastNotification(
-        recipients,
-        `Sabahkı Dərs Cədvəli - ${dayName}`,
-        `${dayName} (${weekType} həftə) ${lessonCount} dərsiniz var. İlk dərs: ${firstLessonTime}\n\n${lessonDetails}`
-      );
-      
-      console.log(`Evening notification sent to ${recipients.length} users`);
-    } catch (error) {
-      console.error('Error in evening notification job:', error);
+  cron.schedule('50 01 * * *', sendTomorrowScheduleNotification,
+    {
+      scheduled: true,
+      timezone: "Asia/Baku"  // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
     }
-  });
-  
+  );
+
   // Hər 5 dəqiqədən bir dərs başlamazdan əvvəl bildiriş yoxlanması
-  cron.schedule('*/5 * * * *', async () => {
-    try {
-      console.log('Checking for upcoming lessons...');
-      
-      const now = new Date();
-      const weekType = determineWeekType(now);
-      const dayName = getDayName(now.getDay());
-      
-      // Həftə sonunda yoxlama etmirik
-      if (now.getDay() === 0 || now.getDay() === 6) {
-        return;
-      }
-      
-      // Cari günün dərs cədvəlini tapırıq
-      const schedule = await Schedule.findOne({ weekType, day: dayName });
-      
-      if (!schedule || !schedule.lessons || schedule.lessons.length === 0) {
-        return;
-      }
-      
-      // İndiki vaxtdan 15 dəqiqə sonra başlayan dərsləri tapırıq
-      const upcomingLessons = schedule.lessons.filter(lesson => {
-        if (!lesson.time || !lesson.time.includes('-')) return false;
-        
-        const [startTime] = lesson.time.split('-');
-        const [hours, minutes] = startTime.split(':').map(Number);
-        
-        const lessonTime = new Date();
-        lessonTime.setHours(hours);
-        lessonTime.setMinutes(minutes);
-        lessonTime.setSeconds(0);
-        
-        // Dərs vaxtından 15 dəqiqə çıxırıq
-        const notificationTime = new Date(lessonTime.getTime() - 15 * 60 * 1000);
-        
-        // İndiki vaxtla notifikasiya vaxtı arasında 2.5 dəqiqə (~5 dəqiqəlik interval yarısı) tolerantlıq
-        const diffInMinutes = Math.abs(now - notificationTime) / (60 * 1000);
-        return diffInMinutes <= 2.5;
-      });
-      
-      if (upcomingLessons.length === 0) {
-        return;
-      }
-      
-      // Bütün istifadəçiləri tapırıq
-      const users = await User.find();
-      const recipients = users
-        .filter(user => user.deviceToken || user.email)
-        .map(user => ({
-          token: user.deviceToken || null,
-          email: user.email || null,
-        }));
-      
-      if (recipients.length === 0) {
-        return;
-      }
-      
-      // Hər dərs üçün bildiriş göndəririk
-      for (const lesson of upcomingLessons) {
-        await sendMulticastNotification(
-          recipients,
-          `Dərs Başlayır: ${lesson.subject}`,
-          `${lesson.time} - ${lesson.subject} dərsi 15 dəqiqə sonra başlayır.\nMüəllim: ${lesson.teacher}\nOtaq: ${lesson.room}`
-        );
-        
-        console.log(`Lesson reminder sent for ${lesson.subject} to ${recipients.length} users`);
-      }
-    } catch (error) {
-      console.error('Error in lesson reminder job:', error);
-    }
-  });
-  
+  cron.schedule('*/5 * * * *', sendLessonReminderNotifications);
+
   console.log('All notification schedulers initialized');
 };
 
