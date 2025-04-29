@@ -164,7 +164,12 @@ const initSchedulers = () => {
   );
 
   // Hər 5 dəqiqədən bir dərs başlamazdan əvvəl bildiriş yoxlanması
-  cron.schedule('*/5 * * * *', sendLessonReminderNotifications);
+  cron.schedule('*/5 * * * *', sendLessonReminderNotifications,
+    {
+      scheduled: true,
+      timezone: "Asia/Baku"  // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
+    }
+  );
 
   console.log('All notification schedulers initialized');
 };

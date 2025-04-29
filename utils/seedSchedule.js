@@ -49,7 +49,7 @@ const scheduleData = {
       { time: '12:00-13:20', subject: 'Elek. es. ve IoT tehl (m)', teacher: 'Meherremova A.', room: '409-3(otaq-korpus)' },
     ],
     'Çərşənbə': [
-      { time: '02:00-10:20', subject: 'Sah es. ve biz.gir. (M)', teacher: 'Ebdurehmanova S.E.', room: '404-1(otaq-korpus)' },
+      { time: '02:04-10:20', subject: 'Sah es. ve biz.gir. (M)', teacher: 'Ebdurehmanova S.E.', room: '404-1(otaq-korpus)' },
       { time: '10:30-11:50', subject: 'Sah es. ve biz.gir. (m)', teacher: 'Ebdurehmanova S.E.', room: '405-1(otaq-korpus)' },
       { time: '12:00-13:20', subject: 'NSE (m)', teacher: 'Sadiqzade C.', room: '303-3(otaq-korpus)' },
     ],
