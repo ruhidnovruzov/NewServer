@@ -35,18 +35,19 @@ const sendTomorrowScheduleNotification = async () => {
     return;
   }
 
+  // Real dərsləri filtrləyirik
+  const realLessons = schedule.lessons.filter(lesson => lesson.subject !== 'Dərs yoxdur');
+
   // Dərs məlumatlarını formatlaşdırırıq
-  const lessonCount = schedule.lessons.length;
+  const lessonCount = realLessons.length;
   let firstLessonTime = 'N/A';
   let lessonDetails = '';
 
-  if (lessonCount > 0 && schedule.lessons[0].time) {
-    firstLessonTime = schedule.lessons[0].time.split('-')[0];
+  if (lessonCount > 0 && realLessons.length > 0 && realLessons[0].time) {
+    firstLessonTime = realLessons[0].time.split('-')[0];
 
-    schedule.lessons.forEach((lesson, index) => {
-      if (lesson.subject !== 'Dərs yoxdur') {
-        lessonDetails += `${index + 1}. ${lesson.time} - ${lesson.subject} (${lesson.room})\n`;
-      }
+    realLessons.forEach((lesson, index) => {
+      lessonDetails += `${index + 1}. ${lesson.time} - ${lesson.subject} (${lesson.room})\n`;
     });
   }
 
@@ -85,6 +86,7 @@ const sendLessonReminderNotifications = async () => {
   // Cari günün dərs cədvəlini tapırıq
   const schedule = await Schedule.findOne({ weekType, day: dayName });
 
+
   if (!schedule || !schedule.lessons || schedule.lessons.length === 0) {
     console.log(`No lessons found for today (${dayName}, ${weekType})`);
     return;
@@ -105,7 +107,7 @@ const sendLessonReminderNotifications = async () => {
 
     const [startTime] = lesson.time.split('-');
     const [hours, minutes] = startTime.trim().split(':').map(Number);
-    
+
     if (isNaN(hours) || isNaN(minutes)) {
       console.log(`Could not parse time for lesson: ${lesson.subject}, time: ${lesson.time}`);
       return false;
@@ -118,7 +120,7 @@ const sendLessonReminderNotifications = async () => {
     // İndiki vaxtla dərs vaxtı arasındakı fərqi dəqiqə ilə hesablayırıq
     const diffInMilliseconds = lessonTime.getTime() - now.getTime();
     const diffInMinutes = diffInMilliseconds / (60 * 1000);
-    
+
     // Dərs 15-20 dəqiqə ərzində başlayacaqsa, bildiriş göndəririk
     // Bu 5 dəqiqəlik pəncərə cron job-ın işləmə intervalı üçün lazımdır
     return diffInMinutes >= 14 && diffInMinutes <= 20;
@@ -156,10 +158,10 @@ console.log('Server timezone offset:', new Date().getTimezoneOffset() / -60);
 // Bütün bildiriş planlaşdırıcılarını başlatmaq
 const initSchedulers = () => {
   // Hər gün axşam 20:00-da sabahkı dərs cədvəli haqqında bildiriş
-  cron.schedule('50 01 * * *', sendTomorrowScheduleNotification,
+  cron.schedule('43 05 * * *', sendTomorrowScheduleNotification,
     {
       scheduled: true,
-      timezone: "Asia/Baku"  // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
+      timezone: "Asia/Baku"   // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
     }
   );
 
@@ -167,7 +169,7 @@ const initSchedulers = () => {
   cron.schedule('*/5 * * * *', sendLessonReminderNotifications,
     {
       scheduled: true,
-      timezone: "Asia/Baku"  // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
+      timezone: "Asia/Baku"   // Açıq şəkildə Azərbaycan saat qurşağını təyin edirik
     }
   );
 
